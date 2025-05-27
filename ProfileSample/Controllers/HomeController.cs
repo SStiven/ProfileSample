@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Entity;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
 using ProfileSample.DAL;
@@ -11,28 +13,40 @@ namespace ProfileSample.Controllers
 {
     public class HomeController : Controller
     {
-        public ActionResult Index()
+        public async Task<ActionResult> Index()
         {
-            var context = new ProfileSampleEntities();
-
-            var sources = context.ImgSources.Take(20).Select(x => x.Id);
-            
-            var model = new List<ImageModel>();
-
-            foreach (var id in sources)
+            using (var context = new ProfileSampleEntities())
             {
-                var item = context.ImgSources.Find(id);
+                var images = await context
+                    .ImgSources
+                    .AsNoTracking()
+                    .Take(20)
+                    .Select(img => new ImageModel
+                    {
+                        Id = img.Id,
+                        Name = img.Name,
+                    }).ToListAsync();
 
-                var obj = new ImageModel()
+                return View(images);
+            }
+        }
+
+        public async Task<ActionResult> Image(int id)
+        {
+            using (var context = new ProfileSampleEntities())
+            {
+                var image = await context
+                    .ImgSources
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(i => i.Id == id);
+
+                if (image == null)
                 {
-                    Name = item.Name,
-                    Data = item.Data
-                };
+                    return HttpNotFound();
+                }
 
-                model.Add(obj);
-            } 
-
-            return View(model);
+                return File(image.Data, "image/jpg");
+            }
         }
 
         public ActionResult Convert()
@@ -47,7 +61,7 @@ namespace ProfileSample.Controllers
                     {
                         byte[] buff = new byte[stream.Length];
 
-                        stream.Read(buff, 0, (int) stream.Length);
+                        stream.Read(buff, 0, (int)stream.Length);
 
                         var entity = new ImgSource()
                         {
@@ -56,9 +70,10 @@ namespace ProfileSample.Controllers
                         };
 
                         context.ImgSources.Add(entity);
-                        context.SaveChanges();
                     }
-                } 
+                }
+
+                context.SaveChanges();
             }
 
             return RedirectToAction("Index");
